@@ -1,20 +1,15 @@
-////////// Definitions //////////
-// L1 definition
+////////// LI Definitions //////////
 type Ident = string
 type Bool = bool
 type Int = int
 // Uncomment each command and add the TypeInfer implementation
+datatype Bop = SUM | MINUS | MULT | DIV                // Algebric
+             | EQ | DIF | LT | LE | GT | GE | AND | OR // Binary Logic
+datatype Uop = NOT                                     // Unary Logic
 datatype Exp    = NVAL(n: Int)
                 | BVAL(b: Bool)
-                // // Algebric
-                // | SUM(e1: Exp, e2: Exp) | MINUS(e1: Exp, e2: Exp) 
-                // | MULT(e1: Exp, e2: Exp) | DIV(e1: Exp, e2: Exp) 
-                // // Logic
-                // | EQ(e1: Exp, e2: Exp) | DIF(e1: Exp, e2: Exp) 
-                // | LT(e1: Exp, e2: Exp) | LE(e1: Exp, e2: Exp)
-                // | GT(e1: Exp, e2: Exp) | GE(e1: Exp, e2: Exp)
-                // | AND(e1: Exp, e2: Exp) | OR(e1: Exp, e2: Exp)
-                // | NOT(e: Exp)
+                | BINOP(bop: Bop, e1: Exp, e2: Exp) 
+                | UNOP(uop: Uop, e: Exp)
                 // // Pair
                 // | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
                 // | IF(e1: Exp, e2: Exp, e3: Exp)
@@ -27,19 +22,20 @@ datatype Exp    = NVAL(n: Int)
                 // | RAISE | TRY(e1: Exp, e2: Exp)
 
 // Types definition
-datatype List<T> = Nil | Cons(head: T, tail: List<T>)
-datatype T = X | Int | Bool | Fun(input: T, output: T) | List | Pair(0: T, 1: T)
+datatype ListInt = Nil | Cons(head: Int, tail: ListInt)
+datatype ListBool = Nil | Cons(head: Bool, tail: ListBool)
+datatype T = X | Int | Bool | Fun(input: T, output: T) | ListBool | ListInt | Pair(0: T, 1: T)
 
+//////////////////////////////////////
 ////////// Type infer logic //////////
-datatype IdentTypePair = identTypePair(0: Ident, 1: T)
+datatype TypePair = typePair(a: T, b: T)
 datatype Env = env(map<Exp, T>)
 // Type equations Cons((X, Bool), Cons((Y, Int), Empty)) (good for pattern match)
-datatype TypeEq = Empty | Cons(head: IdentTypePair, tail: TypeEq) 
+type TypeEq = set<TypePair> 
 
 method Main() {
-  print "hello, Dafny\n";
   var env := env(map[]);
-  var p := Exp.NVAL(5);
+  var p   := Exp.BINOP(Bop.SUM, Exp.NVAL(5), Exp.BVAL(true));
   var ret := typeInfer(env, p);
   print(ret);
 }
@@ -52,16 +48,49 @@ method typeInfer(env: Env, P: Exp) returns (typeInfered: T) {
 }
 
 method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
-  // (T.Int, typeEq({identTypePair("X", T.Int)}))
+  // eq := TypeEq.Cons(typePair(T.Int, T.Int), Empty);
   match e {
-    case NVAL(n) => { t := T.Int; eq := Empty; }
-    case BVAL(b) => { t := T.Bool; eq := Empty; }
+    case NVAL(n) => { t := T.Int; eq := {}; }
+    case BVAL(b) => { t := T.Bool; eq := {}; }
+    case BINOP(bop: Bop, e1: Exp, e2: Exp) => {
+      var t1, c1 := collect(env, e1);
+      var t2, c2 := collect(env, e2); 
+      var newTypeEq : TypeEq;
+      match bop {
+        case SUM   => newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
+        case MINUS => newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
+        case MULT  => newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
+        case DIV   => newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
+        case EQ    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case DIF   => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case LT    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case LE    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case GT    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case GE    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case AND   => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+        case OR    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+      }
+      t := t2; eq := c1 + c2 + newTypeEq;
+    }
+    case UNOP(uop: Uop, e1: Exp) => {
+      var t1, c1 := collect(env, e1);
+      var newTypeEq := {typePair(t1, T.Bool)};
+      t := t1; eq := c1 + newTypeEq;
+    }
   }
 }
 
-method unify(eq: TypeEq) returns (ret: TypeEq) {
-  match eq {
-    case Empty => ret := Empty;
-    case Cons(head, tail) => ret := tail;
+method unify(eq: TypeEq) returns (ret: TypeEq)  
+{
+  var eqMutable := eq;
+  while (eqMutable != {})
+    decreases eqMutable;
+  {
+    var typePair :| typePair in eqMutable;
+    if {
+      case typePair.a == T.Int && typePair.b == T.Int => eqMutable := eqMutable - {typePair};
+      case typePair.a == T.Bool && typePair.b == T.Bool => eqMutable := eqMutable - {typePair};
+      case true => print("FAIL"); return {};
+    }
   }
 }
