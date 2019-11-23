@@ -11,7 +11,7 @@ datatype Exp    = NVAL(n: Int)
                 | BINOP(bop: Bop, e1: Exp, e2: Exp) 
                 | UNOP(uop: Uop, e: Exp)
                 // // Pair
-                // | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
+                | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
                 | IF(e1: Exp, e2: Exp, e3: Exp)
                 // | ID(x: Ident)
                 // | APP(e1: Exp, e2: Exp)
@@ -81,6 +81,19 @@ method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
       var t3, c3 := collect(env, e3); 
       var newTypeEq := {typePair(t1, T.Bool), typePair(t2, t3)};
       t := t2; eq := c1 + c2 + c3 + newTypeEq;
+    }
+    case PAIR(e1: Exp, e2: Exp) => {
+      var t1, c1 := collect(env, e1);
+      var t2, c2 := collect(env, e2); 
+      t := T.Pair(t1, t2); eq := c1 + c2;
+    }
+    case FST(e1: Exp) => {
+      var t1, c1 := collect(env, e1);
+      t := t1; eq := c1;
+    }
+    case SND(e1: Exp) => {
+      var t1, c1 := collect(env, e1);
+      t := t1; eq := c1;
     }
   }
 }
