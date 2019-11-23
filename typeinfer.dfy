@@ -12,7 +12,7 @@ datatype Exp    = NVAL(n: Int)
                 | UNOP(uop: Uop, e: Exp)
                 // // Pair
                 // | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
-                // | IF(e1: Exp, e2: Exp, e3: Exp)
+                | IF(e1: Exp, e2: Exp, e3: Exp)
                 // | ID(x: Ident)
                 // | APP(e1: Exp, e2: Exp)
                 // | FN(x: Ident, e: Exp)
@@ -24,7 +24,7 @@ datatype Exp    = NVAL(n: Int)
 // Types definition
 datatype ListInt = Nil | Cons(head: Int, tail: ListInt)
 datatype ListBool = Nil | Cons(head: Bool, tail: ListBool)
-datatype T = X | Int | Bool | Fun(input: T, output: T) | ListBool | ListInt | Pair(0: T, 1: T)
+datatype T = X | Int | Bool | Fun(input: T, output: T) | ListBool | ListInt | Pair(0: T, 1: T) | UNDEFINED
 
 //////////////////////////////////////
 ////////// Type infer logic //////////
@@ -33,25 +33,23 @@ datatype Env = env(map<Exp, T>)
 // Type equations Cons((X, Bool), Cons((Y, Int), Empty)) (good for pattern match)
 type TypeEq = set<TypePair> 
 
-method Main() {
-  var env := env(map[]);
-  var p   := Exp.BINOP(Bop.SUM, Exp.NVAL(5), Exp.BVAL(true));
-  var ret := typeInfer(env, p);
-  print(ret);
-}
-
 method typeInfer(env: Env, P: Exp) returns (typeInfered: T) {
   var t, c := collect(env, P);
-  var sigma := unify(c);
+  print("C: "); print(c); print("\n");
+  var sigma, success := unify(c);
+  if (success) {
+    return t;
+  } else {
+    return T.UNDEFINED;
+  } 
   // applysubs(σ, t);
-  return t;
 }
 
 method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
   // eq := TypeEq.Cons(typePair(T.Int, T.Int), Empty);
   match e {
-    case NVAL(n) => { t := T.Int; eq := {}; }
-    case BVAL(b) => { t := T.Bool; eq := {}; }
+    case NVAL(n) => t := T.Int; eq := {}; print("Collect NVAL\n");
+    case BVAL(b) => t := T.Bool; eq := {}; print("Collect BVAL\n");
     case BINOP(bop: Bop, e1: Exp, e2: Exp) => {
       var t1, c1 := collect(env, e1);
       var t2, c2 := collect(env, e2); 
@@ -70,27 +68,73 @@ method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
         case AND   => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
         case OR    => newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
       }
-      t := t2; eq := c1 + c2 + newTypeEq;
+      t := t2; eq := c1 + c2 + newTypeEq; print("Collect BINOP\n");
     }
     case UNOP(uop: Uop, e1: Exp) => {
       var t1, c1 := collect(env, e1);
       var newTypeEq := {typePair(t1, T.Bool)};
-      t := t1; eq := c1 + newTypeEq;
+      t := t1; eq := c1 + newTypeEq; print("Collect UNOP\n");
+    }
+    case IF(e1: Exp, e2: Exp, e3: Exp) => {
+      var t1, c1 := collect(env, e1);
+      var t2, c2 := collect(env, e2); 
+      var t3, c3 := collect(env, e3); 
+      var newTypeEq := {typePair(t1, T.Bool), typePair(t2, t3)};
+      t := t2; eq := c1 + c2 + c3 + newTypeEq;
     }
   }
 }
 
-method unify(eq: TypeEq) returns (ret: TypeEq)  
+method unify(eq: TypeEq) returns (eqMutable: TypeEq, success: bool)  
 {
-  var eqMutable := eq;
+  eqMutable := eq;
   while (eqMutable != {})
     decreases eqMutable;
   {
     var typePair :| typePair in eqMutable;
-    if {
-      case typePair.a == T.Int && typePair.b == T.Int => eqMutable := eqMutable - {typePair};
-      case typePair.a == T.Bool && typePair.b == T.Bool => eqMutable := eqMutable - {typePair};
-      case true => print("FAIL"); return {};
+    if (typePair.a == T.Int && typePair.b == T.Int) {
+      eqMutable := eqMutable - {typePair}; print("Unify Int\n");
+    } else if (typePair.a == T.Bool && typePair.b == T.Bool) {
+      eqMutable := eqMutable - {typePair}; print("Unify Bool\n");
+    } else {
+      success := false; print("Unify fails"); return; 
     }
   }
+  success := true;
+}
+
+function method isDataTypeByName(data: T, name: string): bool {
+  match data {
+    case Int => name == "Int" 
+    case Bool => name == "Bool"
+    case UNDEFINED => name == "UNDEFINED"
+    case X => name == "X"
+    case Fun(i, o) => name == "Fun"
+    case ListInt => name == "ListInt"
+    case ListBool => name == "ListBool"
+    case Pair(a, b) => name == "Pair"
+  }
+}
+
+method Main() {
+  var env := env(map[]);
+  var typeInfered: T;
+
+  ///////////// Tests /////////////
+  typeInfered := typeInfer(env, Exp.BINOP(Bop.SUM, Exp.NVAL(5), Exp.NVAL(8)));
+  print(typeInfered);
+  print(" == T.Int\n");
+
+  typeInfered := typeInfer(env, Exp.BINOP(Bop.SUM, Exp.NVAL(5), Exp.BVAL(true)));
+  print(typeInfered);
+  print(" == T.UNDEFINED\n");
+
+  typeInfered := typeInfer(env, Exp.BINOP(
+      Bop.MULT,
+      Exp.BINOP(Bop.MINUS, Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)), 
+      Exp.BINOP(Bop.SUM, Exp.NVAL(5), Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)))
+    )
+  );
+  print(typeInfered);
+  print(" == T.Int\n");
 }
