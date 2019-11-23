@@ -11,7 +11,7 @@ datatype Exp    = NVAL(n: Int)
                 | BINOP(bop: Bop, e1: Exp, e2: Exp) 
                 | UNOP(uop: Uop, e: Exp)
                 // // Pair
-                // | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
+                | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
                 | IF(e1: Exp, e2: Exp, e3: Exp)
                 // | ID(x: Ident)
                 // | APP(e1: Exp, e2: Exp)
@@ -82,6 +82,39 @@ method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
       var newTypeEq := {typePair(t1, T.Bool), typePair(t2, t3)};
       t := t2; eq := c1 + c2 + c3 + newTypeEq;
     }
+    case PAIR(e1: Exp, e2: Exp) => {
+      var t1, c1 := collect(env, e1);
+      var t2, c2 := collect(env, e2); 
+      t := T.Pair(t1, t2); eq := c1 + c2;
+    }
+    case FST(e1: Exp) => {
+      match e1 {
+        case PAIR(first: Exp, second: Exp) => {
+          t, eq := collect(env, first);
+        }
+        case NVAL(n) =>
+        case BVAL(b) =>
+        case BINOP(bop: Bop, e1: Exp, e2: Exp) =>
+        case UNOP(uop: Uop, e1: Exp) =>
+        case IF(e1: Exp, e2: Exp, e3: Exp) =>
+        case FST(e1: Exp) =>
+        case SND(e1: Exp) =>
+      }
+    }
+    case SND(e1: Exp) => {
+      match e1 {
+        case PAIR(first: Exp, second: Exp) => {
+          t, eq := collect(env, second);
+        }
+        case NVAL(n) =>
+        case BVAL(b) =>
+        case BINOP(bop: Bop, e1: Exp, e2: Exp) =>
+        case UNOP(uop: Uop, e1: Exp) =>
+        case IF(e1: Exp, e2: Exp, e3: Exp) =>
+        case FST(e1: Exp) =>
+        case SND(e1: Exp) =>
+      }
+    }
   }
 }
 
@@ -129,7 +162,8 @@ method Main() {
   print(typeInfered);
   print(" == T.UNDEFINED\n");
 
-  typeInfered := typeInfer(env, Exp.BINOP(
+  typeInfered := typeInfer(env, 
+    Exp.BINOP(
       Bop.MULT,
       Exp.BINOP(Bop.MINUS, Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)), 
       Exp.BINOP(Bop.SUM, Exp.NVAL(5), Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)))
@@ -137,4 +171,26 @@ method Main() {
   );
   print(typeInfered);
   print(" == T.Int\n");
+
+  typeInfered := typeInfer(env, 
+    Exp.FST(
+      Exp.PAIR(
+        Exp.BINOP(Bop.MINUS, Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)), 
+        Exp.BINOP(Bop.LT, Exp.BVAL(true), Exp.BVAL(false))
+      )
+    )
+  );
+  print(typeInfered);
+  print(" == T.Int\n");
+
+  typeInfered := typeInfer(env, 
+    Exp.SND(
+      Exp.PAIR(
+        Exp.BINOP(Bop.MINUS, Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)), 
+        Exp.BINOP(Bop.LT, Exp.BVAL(true), Exp.BVAL(false))
+      )
+    )
+  );
+  print(typeInfered);
+  print(" == T.Bool\n");
 }
