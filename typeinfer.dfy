@@ -10,28 +10,25 @@ datatype Exp    = NVAL(n: Int)
                 | BVAL(b: Bool)
                 | BINOP(bop: Bop, e1: Exp, e2: Exp) 
                 | UNOP(uop: Uop, e: Exp)
-                // // Pair
                 | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
                 | IF(e1: Exp, e2: Exp, e3: Exp)
-                // | ID(x: Ident)
+                | ID(x: Ident)
                 // | APP(e1: Exp, e2: Exp)
                 // | FN(x: Ident, e: Exp)
                 // | LET(x: Ident, e1: Exp, e2: Exp)
                 // | LETREC(f: Ident, y: Exp, e1: Exp, e2: Exp) // FIXME
-                // | NIL | CONS(e1: Exp, e2: Exp) | HD(e: Exp) | TL(e: Exp)
+                | NIL | CONS(e1: Exp, e2: Exp) | HD(e: Exp) | TL(e: Exp) | ISEMPTY(e: Exp)
                 // | RAISE | TRY(e1: Exp, e2: Exp)
 
 // Types definition
-datatype ListInt = Nil | Cons(head: Int, tail: ListInt)
-datatype ListBool = Nil | Cons(head: Bool, tail: ListBool)
-datatype T = X | Int | Bool | Fun(input: T, output: T) | ListBool | ListInt | Pair(0: T, 1: T) | UNDEFINED
+datatype T = X | Int | Bool | Fun(input: T, output: T) | List(t: T) | Pair(0: T, 1: T) | UNDEFINED
 
 //////////////////////////////////////
 ////////// Type infer logic //////////
 datatype TypePair = typePair(a: T, b: T)
-datatype Env = env(map<Exp, T>)
-// Type equations Cons((X, Bool), Cons((Y, Int), Empty)) (good for pattern match)
 type TypeEq = set<TypePair> 
+// Type equations Cons((X, Bool), Cons((Y, Int), Empty)) (good for pattern match)
+type Env = map<Ident, T>
 
 method typeInfer(env: Env, P: Exp) returns (typeInfered: T) {
   var t, c := collect(env, P);
@@ -99,6 +96,12 @@ method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
         case IF(e1: Exp, e2: Exp, e3: Exp) =>
         case FST(e1: Exp) =>
         case SND(e1: Exp) =>
+        case ID(x: Ident) =>
+        case NIL =>
+        case CONS(e1: Exp, e2: Exp) => 
+        case HD(e1: Exp) => 
+        case TL(e1: Exp) =>
+        case ISEMPTY(e1: Exp) =>
       }
     }
     case SND(e1: Exp) => {
@@ -113,7 +116,48 @@ method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq) {
         case IF(e1: Exp, e2: Exp, e3: Exp) =>
         case FST(e1: Exp) =>
         case SND(e1: Exp) =>
+        case ID(x: Ident) =>
+        case NIL =>
+        case CONS(e1: Exp, e2: Exp) =>
+        case HD(e1: Exp) =>
+        case TL(e1: Exp) =>
+        case ISEMPTY(e1: Exp) =>
       }
+    }
+    case ID(x: Ident) => {
+      if (x in env) {
+        t := env[x]; eq := {};
+      } else {
+        print("ERRRRRR");
+      }
+    }
+    case NIL => {
+      // X new
+      t := T.List(T.X); eq := {};
+    } 
+    case CONS(e1: Exp, e2: Exp) => {
+      var t1, c1 := collect(env, e1);
+      var t2, c2 := collect(env, e2);
+      var newTypeEq := {typePair(List(t1), t2)};
+      t := t2; eq := c1 + c2 + newTypeEq;
+    }
+    case HD(e1: Exp) => {
+      var t1, c1 := collect(env, e1);
+      // X new
+      var newTypeEq := {typePair(t1, List(T.X))};
+      t := T.X; eq := c1 + newTypeEq;
+    }
+    case TL(e1: Exp) => {
+      var t1, c1 := collect(env, e1);
+      // X new
+      var newTypeEq := {typePair(t1, List(T.X))};
+      t := T.X; eq := c1 + newTypeEq;
+    }
+    case ISEMPTY(e1: Exp) => {
+      var t1, c1 := collect(env, e1);
+      // X new
+      var newTypeEq := {typePair(t1, List(T.X))};
+      t := T.Bool; eq := c1 + newTypeEq;
     }
   }
 }
@@ -143,14 +187,13 @@ function method isDataTypeByName(data: T, name: string): bool {
     case UNDEFINED => name == "UNDEFINED"
     case X => name == "X"
     case Fun(i, o) => name == "Fun"
-    case ListInt => name == "ListInt"
-    case ListBool => name == "ListBool"
+    case List(t: T) => name == "T List"
     case Pair(a, b) => name == "Pair"
   }
 }
 
 method Main() {
-  var env := env(map[]);
+  var env := map[];
   var typeInfered: T;
 
   ///////////// Tests /////////////
