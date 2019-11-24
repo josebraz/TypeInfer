@@ -13,8 +13,8 @@ datatype Exp    = NVAL(n: Int)
                 | PAIR(e1: Exp, e2: Exp) | FST(e: Exp) | SND(e: Exp)
                 | IF(e1: Exp, e2: Exp, e3: Exp)
                 | ID(x: Ident)
-                // | APP(e1: Exp, e2: Exp)
-                // | FN(x: Ident, e: Exp)
+                | APP(e1: Exp, e2: Exp) // e1 function and e2 value
+                | FN(x: Ident, e: Exp)
                 // | LET(x: Ident, e1: Exp, e2: Exp)
                 // | LETREC(f: Ident, y: Exp, e1: Exp, e2: Exp) // FIXME
                 | NIL | CONS(e1: Exp, e2: Exp) | HD(e: Exp) | TL(e: Exp) | ISEMPTY(e: Exp)
@@ -34,10 +34,11 @@ class TypeInfer {
 
   method typeInfer(env: Env, P: Exp) returns (typeInfered: T) 
     modifies this // to update the variables
+    decreases *
   {
     this.variables := 0;
     var t, c := collect(env, P);
-    var sigma, success := unify(c);
+    var sigma, success := unify({}, c);
     if (success) {
       return t;
     } else {
@@ -48,7 +49,10 @@ class TypeInfer {
 
   method collect(env: Env, e: Exp) returns (t: T, eq: TypeEq)
     modifies this // to update the variables
+    decreases *
+    ensures |env| >= 0
   {
+    var newEnv: Env := env;
     match e {
       case NVAL(n) => t := T.Int; eq := {}; print("Collect NVAL ");
       case BVAL(b) => t := T.Bool; eq := {}; print("Collect BVAL ");
@@ -110,7 +114,7 @@ class TypeInfer {
         if (x in env) {
           t := env[x]; eq := {}; print("Collect ID ");
         } else {
-          print("ERRRRRR");
+          print("ERROR: Ident not found in the envelopment\n");
         }
       }
       case NIL => {
@@ -146,6 +150,7 @@ class TypeInfer {
         t := T.Bool; eq := c1 + newTypeEq; print("Collect ISEMPTY ");
       }
       case RAISE => {
+        // X new
         this.variables := this.variables + 1;
         t := T.X(this.variables); eq := {}; print("Collect RAISE ");
       }
@@ -155,38 +160,177 @@ class TypeInfer {
         var newTypeEq := {typePair(t1, t2)};
         t := t2; eq := c1 + c2 + newTypeEq; print("Collect TRY ");
       }
+      // case LET(x: Ident, e1: Exp, e2: Exp) => {
+      //   var t1, c1 := collect(env, e1);
+      //   var t2, c2 := collect(env, e2);
+      //   // X new
+      //   this.variables := this.variables + 1;
+      //   var newTypeEq := {typePair(T.X(this.variables), t1)};
+      //   t := t2; eq := c1 + c2 + newTypeEq; print("Collect TRY ");
+      // }
+      case APP(e1: Exp, e2: Exp) => {
+        var t1, c1 := collect(env, e1);
+        var t2, c2 := collect(env, e2);
+        // X new
+        this.variables := this.variables + 1;
+        var newTypeEq := {typePair(t1, T.Fun(t2, T.X(this.variables)))};
+        t := T.X(this.variables); eq := c1 + c2 + newTypeEq; print("Collect FN ");
+      }
+      case FN(x: Ident, e1: Exp) => {
+        // X new
+        this.variables := this.variables + 1;
+        newEnv := newEnv[x := T.X(this.variables)];
+        var t1, c1 := collect(newEnv, e1);
+        t := T.Fun(T.X(this.variables), t1); eq := c1; print("Collect FN ");
+      }
     }
   }
 
-  method unify(eq: TypeEq) returns (eqReturns: TypeEq, success: bool)  
+  method unify(sigma: TypeEq, eq: TypeEq) returns (sigmaRet: TypeEq, success: bool)  
     modifies this
+    decreases *
   {
+    sigmaRet := sigma;
+    success := true;
+    var mutableEq := eq;
     print("Received equation: "); print(eq); print("\n");
-    // remove trivial equivalent types
-    eqReturns := set pair:TypePair | pair in eq && pair.a != pair.b :: typePair(pair.a, pair.b);
-    print("After unify equation: "); print(eqReturns); print("\n");
-    success := eqReturns == {};
-    
-    // while (eqMutable != {})
-    //   decreases eqMutable;
-    // {
-    //   var pairType :| pairType in eqMutable;
-    //   if {
-    //     case pairType.a == T.Int && pairType.b == T.Int   => eqMutable := eqMutable - {pairType}; print("Unify Int\n");
-    //     case pairType.a == T.Bool && pairType.b == T.Bool => eqMutable := eqMutable - {pairType}; print("Unify Bool\n");
-    //     case pairType.a == T.List(T.Int) && pairType.b == T.List(T.Int)   => eqMutable := eqMutable - {pairType}; print("Unify Int List"); // optimization by the case 1
-    //     case pairType.a == T.List(T.Bool) && pairType.b == T.List(T.Bool) => eqMutable := eqMutable - {pairType}; print("Unify Bool List"); // optimization by the case 1
-        
-        
-        
-    //     // case pairType.a == T.Fun(T.Int, T.Int) && pairType.b == T.Int   => eqMutable := eqMutable - {pairType}; print("Unify Int\n");
-    //     case true => success := false; print("Unify fails\n"); return; 
-    //   }
-    // }
+
+    if (eq != {}) {
+      var pairType: TypePair :| pairType in eq;
+      mutableEq := mutableEq - {pairType}; // remove current pair type
+      match pairType {
+        case typePair(a: T, b: T) => {
+          match a {
+            case X(n: int) => {
+              if (a == b) { // TODO: verificar na arvore de tipos
+                success := false;
+                return;
+              }
+              sigmaRet := sigma + {typePair(X(n), b)};
+              var eqChanger := typeEqChange(eq, X(n), b);
+              mutableEq := mutableEq + eqChanger;
+              sigmaRet, success := unify(sigmaRet, mutableEq);
+              return;
+            }
+            case Fun(t1: T, t2: T) => {
+              match b {
+                case Fun(t3: T, t4: T) => {
+                  mutableEq := mutableEq + {typePair(t1, t3)} + {typePair(t2, t4)};
+                  sigmaRet, success := unify(sigmaRet, mutableEq);
+                  return;
+                }
+                case Pair(t3: T, t4: T) => case List(t2list: T) => case X(n: int) => case Bool => case Int => case UNDEFINED =>
+              }
+            }
+            case Pair(t1: T, t2: T) => {
+              match b {
+                case Pair(t3: T, t4: T) => {
+                  mutableEq := mutableEq + {typePair(t1, t3)} + {typePair(t2, t4)};
+                  sigmaRet, success := unify(sigmaRet, mutableEq);
+                  return;
+                }
+                case Fun(t3: T, t4: T) => case List(t2list: T) => case X(n: int) => case Bool => case Int => case UNDEFINED =>
+              }
+            }
+            case List(t1list: T) => {
+              match b {
+                case List(t2list: T) => {
+                  mutableEq := mutableEq + {typePair(t1list, t2list)};
+                  sigmaRet, success := unify(sigmaRet, mutableEq);
+                  return;
+                }
+                case Pair(t3: T, t4: T) => case Fun(t3: T, t4: T) => case X(n: int) => case Bool => case Int => case UNDEFINED =>
+              }
+            }
+            case Bool => {
+              if (b == Bool) {
+                sigmaRet, success := unify(sigmaRet, mutableEq);
+                return;
+              }
+            }
+            case Int => {
+              if (b == Int) {
+                sigmaRet, success := unify(sigmaRet, mutableEq);
+                return;
+              }
+            }
+            case UNDEFINED =>
+          }
+          match b {
+            case X(n: int) => {
+              if (a == b) { // TODO: verificar na arvore de tipos
+                success := false;
+                return;
+              }
+              sigmaRet := sigma + {typePair(X(n), a)};
+              var eqChanger := typeEqChange(eq, X(n), a);
+              mutableEq := mutableEq + eqChanger;
+              sigmaRet, success := unify(sigmaRet, mutableEq);
+              return;
+            }
+            // All others tests in match "a"
+            case Fun(t1: T, t2: T) => case Pair(t1: T, t2: T) => case List(tlist: T) => case Bool => case Int => case UNDEFINED =>
+          }
+        }
+      }
+    } else {
+      return; // all equations processed
+    }
+    success := false; // não passou por nenhum "return" na sessão de match
   }
 }
 
-method Main() {
+// caminha na árvore de tipos T, substituindo o tipo "from" por "to"
+method TChange(tree: T, from: T, to: T) returns (ret: T)
+  decreases *
+{
+  if (tree == from) {
+    ret := to;
+  } else {
+    match (tree) {
+      case Fun(t1: T, t2: T) => {
+        var t1Node := TChange(t1, from, to);
+        var t2Node := TChange(t2, from, to);
+        ret := Fun(t1Node, t2Node);
+      }
+      case Pair(t1: T, t2: T) => {
+        var t1Node := TChange(t1, from, to);
+        var t2Node := TChange(t2, from, to);
+        ret := Fun(t1Node, t2Node);
+      }
+      case List(tlist: T) => {
+        var tlistNode := TChange(tlist, from, to);
+        ret := List(tlistNode);
+      }
+      case Bool => case Int => case X(n: int) => case UNDEFINED =>
+    }
+  }
+}
+
+method typeEqChange(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
+  decreases *
+{
+  changed := {};
+  var it := eq;
+  // call unify for type variables 
+  while (it != {})
+    decreases * 
+  {
+    var pairType: TypePair :| pairType in it;
+    if (pairType.a == from) {
+      var treeChanged := TChange(pairType.a, from, to);
+      changed := changed + {typePair(pairType.b, treeChanged)};
+    } else if (pairType.b == from) {
+      var treeChanged := TChange(pairType.b, from, to);
+      changed := changed + {typePair(pairType.a, treeChanged)};
+    }
+    it := it - {pairType};
+  }
+}
+
+method Main()
+ decreases *
+ {
   var typeInfer := new TypeInfer;
   var env := map[];
   var typeInfered: T;
@@ -318,6 +462,18 @@ method Main() {
     )
   );
   print("======== "); print(typeInfered); print(" == T.Int ======== \n");
+
+  print("===> FUNCTION SUCCESS\n");
+  typeInfered := typeInfer.typeInfer(env, 
+    Exp.APP(
+      Exp.FN(
+        "r", 
+        Exp.BINOP(Bop.MINUS, Exp.ID("r"), Exp.NVAL(8)) 
+      ),
+      Exp.NVAL(5)
+    )
+  );
+  print("======== "); print(typeInfered); print(" == T.X ======== \n");
 
 
 }
