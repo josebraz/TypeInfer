@@ -15,8 +15,8 @@ datatype Exp    = NVAL(n: Int)
                 | ID(x: Ident)
                 | APP(e1: Exp, e2: Exp) // e1 function and e2 value
                 | FN(x: Ident, e: Exp)
-                // | LET(x: Ident, e1: Exp, e2: Exp)
-                // | LETREC(f: Ident, y: Exp, e1: Exp, e2: Exp) // FIXME
+                | LET(x: Ident, e1: Exp, e2: Exp)
+                | LETREC(f: Ident, y: Ident, e1: Exp, e2: Exp)
                 | NIL | CONS(e1: Exp, e2: Exp) | HD(e: Exp) | TL(e: Exp) | ISEMPTY(e: Exp)
                 | RAISE | TRY(e1: Exp, e2: Exp)
 
@@ -39,7 +39,9 @@ class TypeInfer {
     this.variables := 0;
     var t, c := collect(env, P);
     var sigma, success := unify({}, c);
+    
     if (success) {
+      print("Sigma: "); print(sigma); print("\n");
       return t;
     } else {
       return T.UNDEFINED;
@@ -160,21 +162,13 @@ class TypeInfer {
         var newTypeEq := {typePair(t1, t2)};
         t := t2; eq := c1 + c2 + newTypeEq; print("Collect TRY ");
       }
-      // case LET(x: Ident, e1: Exp, e2: Exp) => {
-      //   var t1, c1 := collect(env, e1);
-      //   var t2, c2 := collect(env, e2);
-      //   // X new
-      //   this.variables := this.variables + 1;
-      //   var newTypeEq := {typePair(T.X(this.variables), t1)};
-      //   t := t2; eq := c1 + c2 + newTypeEq; print("Collect TRY ");
-      // }
       case APP(e1: Exp, e2: Exp) => {
         var t1, c1 := collect(env, e1);
         var t2, c2 := collect(env, e2);
         // X new
         this.variables := this.variables + 1;
         var newTypeEq := {typePair(t1, T.Fun(t2, T.X(this.variables)))};
-        t := T.X(this.variables); eq := c1 + c2 + newTypeEq; print("Collect FN ");
+        t := T.X(this.variables); eq := c1 + c2 + newTypeEq; print("Collect APP ");
       }
       case FN(x: Ident, e1: Exp) => {
         // X new
@@ -182,6 +176,25 @@ class TypeInfer {
         newEnv := newEnv[x := T.X(this.variables)];
         var t1, c1 := collect(newEnv, e1);
         t := T.Fun(T.X(this.variables), t1); eq := c1; print("Collect FN ");
+      }
+      case LET(x: Ident, e1: Exp, e2: Exp) => {
+        var t1, c1 := collect(env, e1);
+        // X new
+        this.variables := this.variables + 1;
+        newEnv := newEnv[x := T.X(this.variables)];
+        var t2, c2 := collect(newEnv, e2);
+        var newTypeEq := {typePair(T.X(this.variables), t1)};
+        t := t2; eq := c1 + c2 + newTypeEq; print("Collect LET ");
+      }
+      case LETREC(f: Ident, y: Ident, e1: Exp, e2: Exp) => {
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        this.variables := this.variables + 1; var Y := T.X(this.variables); // Y new
+        newEnv := newEnv[f := X];
+        var t2, c2 := collect(newEnv, e2);
+        newEnv := newEnv[y := Y];
+        var t1, c1 := collect(newEnv, e1);
+        var newTypeEq := {typePair(X, T.Fun(Y, t1))};
+        t := t2; eq := c1 + c2 + newTypeEq; print("Collect LET ");
       }
     }
   }
@@ -463,6 +476,15 @@ method Main()
   );
   print("======== "); print(typeInfered); print(" == T.Int ======== \n");
 
+  print("===> FUNCTION FAIL\n");
+  typeInfered := typeInfer.typeInfer(env, 
+    Exp.APP(
+      Exp.PAIR(Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)),
+      Exp.NVAL(5)
+    )
+  );
+  print("======== "); print(typeInfered); print(" == T.UNDEFINED ======== \n");
+
   print("===> FUNCTION SUCCESS\n");
   typeInfered := typeInfer.typeInfer(env, 
     Exp.APP(
@@ -473,7 +495,34 @@ method Main()
       Exp.NVAL(5)
     )
   );
-  print("======== "); print(typeInfered); print(" == T.X ======== \n");
+  print("======== "); print(typeInfered); print(" == T.X (Int) ======== \n");
 
+  print("===> LET SUCCESS\n");
+  typeInfered := typeInfer.typeInfer(env, 
+    Exp.LET(
+      "y",
+      Exp.BINOP(Bop.MINUS, Exp.NVAL(10), Exp.NVAL(5)), // y = Int (5)
+      Exp.LET(
+        "x",
+        Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(4)), // x = Int (1)
+        Exp.BINOP(Bop.SUM, Exp.ID("x"), Exp.ID("y")) // x + y = Int
+      )
+    )
+  );
+  print("======== "); print(typeInfered); print(" == T.X (Int) ======== \n");
+
+  print("===> LET FAIL\n");
+  typeInfered := typeInfer.typeInfer(env, 
+    Exp.LET(
+      "y",
+      Exp.BVAL(true), // y = Bool
+      Exp.LET(
+        "x",
+        Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(4)), // x = Int (1)
+        Exp.BINOP(Bop.SUM, Exp.ID("x"), Exp.ID("y")) // x + y = UNDEFINED
+      )
+    )
+  );
+  print("======== "); print(typeInfered); print(" == T.UNDEFINED ======== \n");
 
 }
