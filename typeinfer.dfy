@@ -89,7 +89,7 @@ class TypeInfer {
         t := T.Pair(t1, t2); eq := c1 + c2; print("Collect PAIR ");
       }
       case FST(e1: Exp) => {
-        var pairType, c1 := collect(env, e1);
+        var pairType, c1 := collect(env, e1); print("Collect FST ");
         match pairType {
           case Pair(t1: T, t2: T) => t := t1; eq := c1;
           case Bool => t:= UNDEFINED; eq := {};
@@ -101,7 +101,7 @@ class TypeInfer {
         }
       }
       case SND(e1: Exp) => {
-        var pairType, c1 := collect(env, e1);
+        var pairType, c1 := collect(env, e1); print("Collect SND ");
         match pairType {
           case Pair(t1: T, t2: T) => t := t2; eq := c1;
           case Bool => t:= UNDEFINED; eq := {};
@@ -120,9 +120,8 @@ class TypeInfer {
         }
       }
       case NIL => {
-        // X new
-        this.variables := this.variables + 1;
-        t := T.List(T.X(this.variables)); eq := {}; print("Collect NIL ");
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        t := T.List(X); eq := {}; print("Collect NIL ");
       } 
       case CONS(e1: Exp, e2: Exp) => {
         var t1, c1 := collect(env, e1);
@@ -132,29 +131,25 @@ class TypeInfer {
       }
       case HD(e1: Exp) => {
         var t1, c1 := collect(env, e1);
-        // X new
-        this.variables := this.variables + 1;
-        var newTypeEq := {typePair(t1, List(T.X(this.variables)))};
-        t := T.X(this.variables); eq := c1 + newTypeEq; print("Collect HD ");
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        var newTypeEq := {typePair(t1, List(X))};
+        t := X; eq := c1 + newTypeEq; print("Collect HD ");
       }
       case TL(e1: Exp) => {
         var t1, c1 := collect(env, e1);
-        // X new
-        this.variables := this.variables + 1;
-        var newTypeEq := {typePair(t1, List(T.X(this.variables)))};
-        t := T.X(this.variables); eq := c1 + newTypeEq; print("Collect TL ");
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        var newTypeEq := {typePair(t1, List(X))};
+        t := X; eq := c1 + newTypeEq; print("Collect TL ");
       }
       case ISEMPTY(e1: Exp) => {
         var t1, c1 := collect(env, e1);
-        // X new
-        this.variables := this.variables + 1;
-        var newTypeEq := {typePair(t1, List(T.X(this.variables)))};
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        var newTypeEq := {typePair(t1, List(X))};
         t := T.Bool; eq := c1 + newTypeEq; print("Collect ISEMPTY ");
       }
       case RAISE => {
-        // X new
-        this.variables := this.variables + 1;
-        t := T.X(this.variables); eq := {}; print("Collect RAISE ");
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        t := X; eq := {}; print("Collect RAISE ");
       }
       case TRY(e1: Exp, e2: Exp) => {
         var t1, c1 := collect(env, e1);
@@ -165,25 +160,22 @@ class TypeInfer {
       case APP(e1: Exp, e2: Exp) => {
         var t1, c1 := collect(env, e1);
         var t2, c2 := collect(env, e2);
-        // X new
-        this.variables := this.variables + 1;
-        var newTypeEq := {typePair(t1, T.Fun(t2, T.X(this.variables)))};
-        t := T.X(this.variables); eq := c1 + c2 + newTypeEq; print("Collect APP ");
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        var newTypeEq := {typePair(t1, T.Fun(t2, X))};
+        t := X; eq := c1 + c2 + newTypeEq; print("Collect APP ");
       }
       case FN(x: Ident, e1: Exp) => {
-        // X new
-        this.variables := this.variables + 1;
-        newEnv := newEnv[x := T.X(this.variables)];
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        newEnv := newEnv[x := X];
         var t1, c1 := collect(newEnv, e1);
-        t := T.Fun(T.X(this.variables), t1); eq := c1; print("Collect FN ");
+        t := T.Fun(X, t1); eq := c1; print("Collect FN ");
       }
       case LET(x: Ident, e1: Exp, e2: Exp) => {
         var t1, c1 := collect(env, e1);
-        // X new
-        this.variables := this.variables + 1;
-        newEnv := newEnv[x := T.X(this.variables)];
+        this.variables := this.variables + 1; var X := T.X(this.variables); // X new
+        newEnv := newEnv[x := X];
         var t2, c2 := collect(newEnv, e2);
-        var newTypeEq := {typePair(T.X(this.variables), t1)};
+        var newTypeEq := {typePair(X, t1)};
         t := t2; eq := c1 + c2 + newTypeEq; print("Collect LET ");
       }
       case LETREC(f: Ident, y: Ident, e1: Exp, e2: Exp) => {
@@ -194,7 +186,7 @@ class TypeInfer {
         newEnv := newEnv[y := Y];
         var t1, c1 := collect(newEnv, e1);
         var newTypeEq := {typePair(X, T.Fun(Y, t1))};
-        t := t2; eq := c1 + c2 + newTypeEq; print("Collect LET ");
+        t := t2; eq := c1 + c2 + newTypeEq; print("Collect LETREC ");
       }
     }
   }

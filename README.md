@@ -13,3 +13,5 @@ José Braz
 
 Wellington Hirsch
 
+### Referencias 
+https://ece.uwaterloo.ca/~agurfink/stqam/2019/03/03/dafny-ref
