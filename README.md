@@ -13,8 +13,7 @@ possibilita linguagens implicitamente tipadas.
 * Faça o download do [Visual Studio Code](https://code.visualstudio.com/)
 * Instale o [plugin Dafny](https://marketplace.visualstudio.com/items?itemName=correctnessLab.dafny-vscode) no Visual Studio Code
 
-
-
+<br/>
 __Nota:__ Guia para aprendizado da [linguagem Dafny](https://rise4fun.com/Dafny/tutorial)
 
 __Nota 2:__ Descrição formal e detalhada da [linguagem L1](https://moodle.ufrgs.br/pluginfile.php/3105638/mod_resource/content/1/notas-aula-l1.pdf)
