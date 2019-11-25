@@ -194,7 +194,7 @@ class TypeInfer {
         t := t2; eq := c1 + c2 + newTypeEq; print("Collect LETREC ");
       }
     }
-    print(eq); print("\n");
+    // print(eq); print("\n");
   }
 
   method unify(sigma: TypeEq, eq: TypeEq) returns (sigmaRet: TypeEq, success: bool)  
@@ -204,7 +204,7 @@ class TypeInfer {
     sigmaRet := sigma;
     success := true;
     var mutableEq := eq;
-    print("Received equation: "); print(eq); print("\n");
+    // print("Received equation: "); print(eq); print("\n");
 
     if (eq != {}) {
       var pairType: TypePair :| pairType in eq;
@@ -225,7 +225,7 @@ class TypeInfer {
                 return;
               }
               sigmaRet := sigma + {typePair(X(n1), b)};
-              var eqChanger := typeEqChangeRight(eq, X(n1), b);
+              var eqChanger := typeEqChange(eq, X(n1), b);
               mutableEq := mutableEq + eqChanger;
               sigmaRet, success := unify(sigmaRet, mutableEq);
               return;
@@ -281,7 +281,7 @@ class TypeInfer {
                 return;
               }
               sigmaRet := sigma + {typePair(X(n), a)};
-              var eqChanger := typeEqChangeLeft(eq, X(n), a);
+              var eqChanger := typeEqChange(eq, X(n), a);
               mutableEq := mutableEq + eqChanger;
               sigmaRet, success := unify(sigmaRet, mutableEq);
               return;
@@ -305,6 +305,7 @@ method TChange(tree: T, from: T, to: T) returns (ret: T)
   if (tree == from) {
     ret := to;
   } else {
+    ret := tree; // don't substitute
     match (tree) {
       case Fun(t1: T, t2: T) => {
         var t1Node := TChange(t1, from, to);
@@ -325,47 +326,28 @@ method TChange(tree: T, from: T, to: T) returns (ret: T)
   }
 }
 
-method typeEqChangeLeft(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
+method typeEqChange(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
   decreases *
 {
-  print("====== LEFT ======\n");
-  print("Equation: "); print(eq); print("\n");
-  print("From: "); print(from); print("\n");
-  print("To: "); print(to); print("\n");
+  // print("====== typeEqChange ======\n");
+  // print("Equation: "); print(eq); print("\n");
+  // print("From: "); print(from); print("\n");
+  // print("To: "); print(to); print("\n");
   changed := {};
   var it := eq;
   while (it != {})
     decreases * 
   {
     var pairType: TypePair :| pairType in it;
-    var treeChanged := TChange(pairType.a, from, to);
-    changed := changed + {typePair(treeChanged, pairType.b)};
+    var treeChangedLeft := TChange(pairType.a, from, to);
+    var treeChangedRight := TChange(pairType.b, from, to);
+    changed := changed + {typePair(treeChangedLeft, treeChangedRight)};
     it := it - {pairType};
   }
-  print("Changed: "); print(changed); print("\n");
+  // print("Changed: "); print(changed); print("\n");
 }
 
 // 
-method typeEqChangeRight(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
-  decreases *
-{
-  print("====== RIGHT ======\n");
-  print("Equation: "); print(eq); print("\n");
-  print("From: "); print(from); print("\n");
-  print("To: "); print(to); print("\n");
-  changed := {};
-  var it := eq;
-  while (it != {})
-    decreases * 
-  {
-    var pairType: TypePair :| pairType in it;
-    var treeChanged := TChange(pairType.b, from, to);
-    changed := changed + {typePair(pairType.a, treeChanged)};
-    it := it - {pairType};
-  }
-  print("Changed: "); print(changed); print("\n");
-}
-
 method Main()
  decreases *
  {
@@ -536,14 +518,13 @@ method Main()
   );
   print("======== "); print(typeInfered); print(" == T.X (Int) ======== \n");
   
-
   print("===> LET SUCCESS\n");
   typeInfered := typeInfer.typeInfer(env, 
     Exp.LET(
       "y",
       Exp.BVAL(true), // y = Bool
       Exp.IF(
-        Exp.BINOP(Bop.EQ, Exp.ID("y"), Exp.BVAL(true)), 
+        Exp.ID("y"), 
         Exp.NVAL(1), 
         Exp.NVAL(0)
       )
