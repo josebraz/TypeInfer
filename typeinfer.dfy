@@ -4,8 +4,9 @@ type Bool = bool
 type Int = int
 // Uncomment each command and add the TypeInfer implementation
 datatype Bop = SUM | MINUS | MULT | DIV                // Algebric
-             | EQ | DIF | LT | LE | GT | GE | AND | OR // Binary Logic
+             | EQ | NEQ | LT | LE | GT | GE | AND | OR // Binary Logic
 datatype Uop = NOT                                     // Unary Logic
+// L1 Abstract Syntactic Tree
 datatype Exp    = NVAL(n: Int)
                 | BVAL(b: Bool)
                 | BINOP(bop: Bop, e1: Exp, e2: Exp) 
@@ -37,11 +38,11 @@ class TypeInfer {
     decreases *
   {
     this.variables := 0;
-    var t, c := collect(env, P);
+    var t, c := collect(env, P); print("\n");
     var sigma, success := unify({}, c);
     
+    print("Sigma: "); print(sigma); print("\n");
     if (success) {
-      print("Sigma: "); print(sigma); print("\n");
       return t;
     } else {
       return T.UNDEFINED;
@@ -65,11 +66,14 @@ class TypeInfer {
         if {
           case bop == SUM || bop == MINUS || bop == MULT || bop == DIV => 
             newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
-          case bop == EQ || bop == DIF || bop == LT || bop == LE || bop == GT
-                         || bop == GE || bop == AND || bop == OR => 
+            t := t2; eq := c1 + c2 + newTypeEq; print("Collect BINOP - INT INT => INT");
+          case bop == EQ || bop == NEQ || bop == LT || bop == LE || bop == GT || bop == GE => 
+            newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
+            t := T.Bool; eq := c1 + c2 + newTypeEq; print("Collect BINOP - INT INT => BOOL ");
+          case bop == bop == AND || bop == OR => 
             newTypeEq := {typePair(t1, T.Bool), typePair(t2, T.Bool)};
+            t := t2; eq := c1 + c2 + newTypeEq; print("Collect BINOP - BOOL BOOL => BOOL ");
         }
-        t := t2; eq := c1 + c2 + newTypeEq; print("Collect BINOP ");
       }
       case UNOP(uop: Uop, e1: Exp) => {
         var t1, c1 := collect(env, e1);
@@ -182,13 +186,15 @@ class TypeInfer {
         this.variables := this.variables + 1; var X := T.X(this.variables); // X new
         this.variables := this.variables + 1; var Y := T.X(this.variables); // Y new
         newEnv := newEnv[f := X];
-        var t2, c2 := collect(newEnv, e2);
+        var envWithoutY := newEnv;
         newEnv := newEnv[y := Y];
         var t1, c1 := collect(newEnv, e1);
+        var t2, c2 := collect(envWithoutY, e2);
         var newTypeEq := {typePair(X, T.Fun(Y, t1))};
         t := t2; eq := c1 + c2 + newTypeEq; print("Collect LETREC ");
       }
     }
+    print(eq); print("\n");
   }
 
   method unify(sigma: TypeEq, eq: TypeEq) returns (sigmaRet: TypeEq, success: bool)  
@@ -206,13 +212,20 @@ class TypeInfer {
       match pairType {
         case typePair(a: T, b: T) => {
           match a {
-            case X(n: int) => {
+            case X(n1: int) => {
+              match b {
+                case X(n2: int) => {
+                  sigmaRet, success := unify(sigmaRet, mutableEq);
+                  return;
+                }
+                case Fun(t1: T, t2: T) => case Pair(t3: T, t4: T) => case List(t2list: T) => case Bool => case Int => case UNDEFINED =>
+              }
               if (a == b) { // TODO: verificar na arvore de tipos
                 success := false;
                 return;
               }
-              sigmaRet := sigma + {typePair(X(n), b)};
-              var eqChanger := typeEqChange(eq, X(n), b);
+              sigmaRet := sigma + {typePair(X(n1), b)};
+              var eqChanger := typeEqChangeRight(eq, X(n1), b);
               mutableEq := mutableEq + eqChanger;
               sigmaRet, success := unify(sigmaRet, mutableEq);
               return;
@@ -268,7 +281,7 @@ class TypeInfer {
                 return;
               }
               sigmaRet := sigma + {typePair(X(n), a)};
-              var eqChanger := typeEqChange(eq, X(n), a);
+              var eqChanger := typeEqChangeLeft(eq, X(n), a);
               mutableEq := mutableEq + eqChanger;
               sigmaRet, success := unify(sigmaRet, mutableEq);
               return;
@@ -312,25 +325,45 @@ method TChange(tree: T, from: T, to: T) returns (ret: T)
   }
 }
 
-method typeEqChange(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
+method typeEqChangeLeft(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
   decreases *
 {
+  print("====== LEFT ======\n");
+  print("Equation: "); print(eq); print("\n");
+  print("From: "); print(from); print("\n");
+  print("To: "); print(to); print("\n");
   changed := {};
   var it := eq;
-  // call unify for type variables 
   while (it != {})
     decreases * 
   {
     var pairType: TypePair :| pairType in it;
-    if (pairType.a == from) {
-      var treeChanged := TChange(pairType.a, from, to);
-      changed := changed + {typePair(pairType.b, treeChanged)};
-    } else if (pairType.b == from) {
-      var treeChanged := TChange(pairType.b, from, to);
-      changed := changed + {typePair(pairType.a, treeChanged)};
-    }
+    var treeChanged := TChange(pairType.a, from, to);
+    changed := changed + {typePair(treeChanged, pairType.b)};
     it := it - {pairType};
   }
+  print("Changed: "); print(changed); print("\n");
+}
+
+// 
+method typeEqChangeRight(eq: TypeEq, from: T, to: T) returns (changed: TypeEq)
+  decreases *
+{
+  print("====== RIGHT ======\n");
+  print("Equation: "); print(eq); print("\n");
+  print("From: "); print(from); print("\n");
+  print("To: "); print(to); print("\n");
+  changed := {};
+  var it := eq;
+  while (it != {})
+    decreases * 
+  {
+    var pairType: TypePair :| pairType in it;
+    var treeChanged := TChange(pairType.b, from, to);
+    changed := changed + {typePair(pairType.a, treeChanged)};
+    it := it - {pairType};
+  }
+  print("Changed: "); print(changed); print("\n");
 }
 
 method Main()
@@ -502,6 +535,21 @@ method Main()
     )
   );
   print("======== "); print(typeInfered); print(" == T.X (Int) ======== \n");
+  
+
+  print("===> LET SUCCESS\n");
+  typeInfered := typeInfer.typeInfer(env, 
+    Exp.LET(
+      "y",
+      Exp.BVAL(true), // y = Bool
+      Exp.IF(
+        Exp.BINOP(Bop.EQ, Exp.ID("y"), Exp.BVAL(true)), 
+        Exp.NVAL(1), 
+        Exp.NVAL(0)
+      )
+    )
+  );
+  print("======== "); print(typeInfered); print(" == T.Int ======== \n");
 
   print("===> LET FAIL\n");
   typeInfered := typeInfer.typeInfer(env, 
@@ -516,5 +564,26 @@ method Main()
     )
   );
   print("======== "); print(typeInfered); print(" == T.UNDEFINED ======== \n");
+
+  print("===> LETREC SUCCESS\n"); // fat
+  typeInfered := typeInfer.typeInfer(env, 
+    Exp.LETREC(
+      "fat",
+      "x",
+      Exp.IF(
+        Exp.BINOP(Bop.EQ, Exp.ID("x"), Exp.NVAL(0)), 
+        Exp.NVAL(1), 
+        Exp.BINOP(Bop.MULT, 
+          Exp.ID("x"), 
+          Exp.APP(
+            Exp.ID("fat"), 
+            Exp.BINOP(Bop.MINUS, Exp.ID("x"), Exp.NVAL(1))
+          )
+        )
+      ),
+      Exp.APP(Exp.ID("fat"), Exp.NVAL(5))
+    )
+  );
+  print("======== "); print(typeInfered); print(" == T.X (Int) ======== \n");
 
 }
