@@ -66,7 +66,7 @@ class TypeInfer {
         if {
           case bop == SUM || bop == MINUS || bop == MULT || bop == DIV => 
             newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
-            t := t2; eq := c1 + c2 + newTypeEq; print("Collect BINOP - INT INT => INT");
+            t := t2; eq := c1 + c2 + newTypeEq; print("Collect BINOP - INT INT => INT ");
           case bop == EQ || bop == NEQ || bop == LT || bop == LE || bop == GT || bop == GE => 
             newTypeEq := {typePair(t1, T.Int), typePair(t2, T.Int)};
             t := T.Bool; eq := c1 + c2 + newTypeEq; print("Collect BINOP - INT INT => BOOL ");
@@ -220,7 +220,8 @@ class TypeInfer {
                 }
                 case Fun(t1: T, t2: T) => case Pair(t3: T, t4: T) => case List(t2list: T) => case Bool => case Int => case UNDEFINED =>
               }
-              if (a == b) { // TODO: verificar na arvore de tipos
+              var linkedVariable := TFind(b, n1);
+              if (linkedVariable) {
                 success := false;
                 return;
               }
@@ -276,7 +277,8 @@ class TypeInfer {
           }
           match b {
             case X(n: int) => {
-              if (a == b) { // TODO: verificar na arvore de tipos
+              var linkedVariable := TFind(a, n);
+              if (linkedVariable) {
                 success := false;
                 return;
               }
@@ -295,6 +297,32 @@ class TypeInfer {
       return; // all equations processed
     }
     success := false; // não passou por nenhum "return" na sessão de match
+  }
+}
+
+// caminha na árvore de tipos T, retornando true se achou X(n) ou falso caso contrário
+method TFind(tree: T, x_index: int) returns (ret: bool)
+  decreases *
+{
+  ret := false;
+  match (tree) {
+    case X(n: int) =>
+      ret := n == x_index;
+    case Fun(t1: T, t2: T) => {
+      var x1Node := TFind(t1, x_index);
+      var x2Node := TFind(t2, x_index);
+      ret := x1Node || x2Node;
+    }
+    case Pair(t1: T, t2: T) => {
+      var x1Node := TFind(t1, x_index);
+      var x2Node := TFind(t2, x_index);
+      ret := x1Node || x2Node;
+    }
+    case List(tlist: T) => {
+      var tlistNode := TFind(tlist, x_index);
+      ret := tlistNode;
+    }
+    case Bool => case Int => case UNDEFINED =>
   }
 }
 
@@ -439,7 +467,7 @@ method Main()
     Exp.FST(
       Exp.PAIR(
         Exp.BINOP(Bop.MINUS, Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)), 
-        Exp.BINOP(Bop.LT, Exp.BVAL(true), Exp.BVAL(false))
+        Exp.BINOP(Bop.LT, Exp.NVAL(8), Exp.NVAL(3))
       )
     )
   );
@@ -450,7 +478,7 @@ method Main()
     Exp.SND(
       Exp.PAIR(
         Exp.BINOP(Bop.MINUS, Exp.BINOP(Bop.MINUS, Exp.NVAL(5), Exp.NVAL(8)), Exp.NVAL(8)), 
-        Exp.BINOP(Bop.LT, Exp.BVAL(true), Exp.BVAL(false))
+        Exp.BINOP(Bop.LT, Exp.NVAL(8), Exp.NVAL(3))
       )
     )
   );
